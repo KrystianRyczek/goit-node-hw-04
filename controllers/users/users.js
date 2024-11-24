@@ -6,10 +6,9 @@ const jwt = require('jsonwebtoken')
 
 
 const { fetchAddUser,
-        fetchFindUser,
-        fetchFindCurrentUser,
+        fetchFind,
+        fetchFindAndUpdate,
       } =require("./userService");
-const { token } = require('morgan');
       
 const signUpSchema = Joi.object({ 
   userName: Joi.string().pattern(/[a-zA-Z]{2,}[/ /]{0,1}[a-zA-Z]{2,}/).required(),
@@ -19,12 +18,6 @@ const signUpSchema = Joi.object({
   password: JoiPassword.string().minOfSpecialCharacters(2).minOfLowercase(2).minOfUppercase(2).minOfNumeric(2).noWhiteSpaces().onlyLatinCharacters().doesNotInclude(['password']).required(),
 })
 
-const signInSchema = Joi.object({ 
-
-  email: Joi.string().pattern(/^[a-zA-Z0-9]{2,}[/@/][a-zA-Z]{2,}[/./][a-zA-Z]{2,}/).required(),
-
-  password: JoiPassword.string().minOfSpecialCharacters(2).minOfLowercase(2).minOfUppercase(2).minOfNumeric(2).noWhiteSpaces().onlyLatinCharacters().doesNotInclude(['password']).required(),
-})
 
 const signUpUser = async (req, res, next) => {
   const { error } = signUpSchema.validate(req.body);
@@ -32,13 +25,12 @@ const signUpUser = async (req, res, next) => {
     return next(error)
   }
   try{
-    const user = await fetchFindUser(req.body.email)
+    const user = await fetchFind({email: req.body.email})
     if(user){
       throw new Error('Email is taken!')
     }
   }catch(error){
     error.name = "OcupatedEmail"
-    console.log(error.name)
       return next(error)
   }
 
@@ -53,12 +45,9 @@ const signUpUser = async (req, res, next) => {
 }
 
 const signIpUser = async (req, res, next)  => {
-  const { error } = signInSchema.validate(req.body);
-  if (error){
-    return next(error)
-  }
+
   try{
-    const user = await fetchFindUser(req.body.email)
+    const user = await fetchFind({email: req.body.email})
 
     if(user){
       const isPassCorrect = await user.validatePassword(req.body.password)
@@ -72,6 +61,7 @@ const signIpUser = async (req, res, next)  => {
                                {expiresIn:'12h'}
         )
 
+        await fetchFindAndUpdate({email: user.email}, {token: token})
         return res.status(201).json(token)
       }
     }
@@ -79,19 +69,22 @@ const signIpUser = async (req, res, next)  => {
 
   }catch(error){
     error.name = "IncorrectCredentials"
-    console.log(error.name)
-      return next(error)
+      return next(error)  
   }
 }
 
-
-const signOutUser = (req, res, next)  => {
-  const token=null
-  return res.status(201).json(token)
+const signOutUser = async (req, res, next)  => {
+try{
+  await fetchFindAndUpdate({token: res.locals.user.token}, {token: null})
+  return res.status(200).json({ message: "Successfully signed out" });
+}catch(err){
+  return next(err) 
 }
+}
+
 const currentUser = async (req, res, next)  => {
-   console.log(req.rawHeaders[1])
-  res.json("CURRENT USER ")
+  const user = await fetchFind({token: res.locals.user.token}) 
+  res.status(200).json(user)
 }
 
 
